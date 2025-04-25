@@ -1,0 +1,68 @@
+# ========== Go stuff ==========
+# Binary files
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Go build output
+/bin/
+/build/
+/dist/
+/docs/
+/documentation/
+# Dependency directories
+/vendor/
+
+# Go modules cache
+go.sum
+
+# IDE tooling & temp files
+*.out
+*.log
+/tmp/
+
+# ========== VSCode & Editor config ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========== OS / system files ==========
+.DS_Store
+Thumbs.db
+
+# ========== Env & secret ==========
+.env
+.env.*
+*.key
+*.crt
+*.pem
+!.env.example
+
+# ========== Node.js (for docs or frontend) ==========
+/docs/node_modules/
+/docs/dist/
+/docs/.vitepress/cache/
+/public/node_modules/
+/public/dist/
+docker.md
+
+# ========== Proto generated ==========
+**/*.pb.go
+**/*.pb.gw.go
+**/*.swagger.json
+**/*.pb.validate.go
+**/*.pb.cue
+
+# ========== gRPC Gateway ==========
+**/grpc-gateway/
+**/proto-gen/
+
+# ========== Editor backup ==========
+*~
+
+# ========== go.work files (optional, depends on workflow) ==========
+go.work
+go.work.sum

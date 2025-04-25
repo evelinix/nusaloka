@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s   # Interval untuk melakukan scrape (5 detik sekali)
+
+scrape_configs:
+  - job_name: 'GATEWAY'            # Nama job untuk API Gateway
+    static_configs:
+      - targets: ['api_gateway:8080']  # Target service API Gateway
+
+  - job_name: 'ACCOUNT-SERVICE'        # Nama job, bisa diubah sesuai kebutuhan
+    static_configs:
+      - targets: ['account_service:9001']      # Target service yang di-scrape, sesuaikan dengan port service kamu
+
+  - job_name: 'TRIP-SERVICE'        # Nama job, bisa diubah sesuai kebutuhan
+    static_configs:
+      - targets: ['trip_service:9002']      # Target service yang di-scrape, sesuaikan dengan port service kamu
