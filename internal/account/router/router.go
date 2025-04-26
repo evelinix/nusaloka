@@ -1,70 +1,53 @@
 package router
 
 import (
-	"net/http"
+	"fmt"
 	"time"
 
 	"github.com/evelinix/nusaloka/internal/account/handler"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/httprate"
+	"github.com/evelinix/nusaloka/internal/account/observability"
+	"github.com/evelinix/nusaloka/internal/account/repository"
+	"github.com/evelinix/nusaloka/internal/account/service"
+	"github.com/evelinix/nusaloka/internal/shared/jwtutil"
+	middlewareShared "github.com/evelinix/nusaloka/internal/shared/middleware"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func SetupAccountRouter(r chi.Router) {
+func SetupAccountRouter(r *gin.Engine, db *gorm.DB) {
+	repo := repository.NewAuthRepository(db)
+	svc := service.NewAuthService(repo)
+	h := handler.NewAuthHandler(svc)
 
-	r.Use(middleware.RealIP)
-	r.Use(httprate.LimitByIP(100, 1*time.Minute))
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Account Service is up 🚀"))
+	r.GET("/health", func(c *gin.Context) {
+		c.String(200, fmt.Sprintf("Account Service is up %d", time.Now().Unix()))
 	})
 
-	r.Get("/auth", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Auth Endpoint"))
+	r.GET("/.well-known/jwks.json", handler.JWKSHandler())
+
+	r.POST("/auth/login", h.AuthLoginHandler)
+
+	r.POST("/auth/register", h.RegisterHandler)
+
+	// r.POST("/auth/forgot-password", handler.ForgotPasswordHandler)
+
+	// r.GET("/account", handler.AccountHandler)
+
+	// r.POST("/account/update-password", handler.UpdatePasswordHandler)
+
+	// r.POST("/account/update-avatar", handler.UpdateAvatarHandler)
+
+	// r.GET("/referal", handler.GetReferalHandler)
+
+	r.GET("/token", func(c *gin.Context) {
+		token, _ := jwtutil.GenerateToken("test-id-123")
+		c.JSON(200, gin.H{"token": token})
 	})
 
-	r.Post("/auth/login", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Login Endpoint"))
+	r.GET("/private", middlewareShared.AuthMiddleware(), func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Hello, authorized user!"})
 	})
 
-	r.Post("/auth/register", handler.RegisterHandler)
-
-	r.Post("/auth/forgot-password", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Forgot Password Endpoint"))
-	})
-
-	r.Get("/account", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Account Endpoint"))
-	})
-	
-
-	r.Post("/account/update-password", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Update Password Endpoint"))
-	})
-
-	r.Post("/account/update-avatar", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Update Avatar Endpoint"))
-	})
-
-	r.Get("/referal", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Referal Endpoint"))
-	})
-
-	r.Get("/webauthn", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("WebAuthn Endpoint"))
-	})
-
-	r.Get("/webauthn/start-registration", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("WebAuthn Start Registration Endpoint"))
-	})
-
-	r.Get("/webauthn/finish-registration", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("WebAuthn Finish Registration Endpoint"))
-	})
-
-	// Metrics endpoint
-	r.Handle("/metrics", http.HandlerFunc(handler.PrometheusHandler))
+	r.GET("/metrics", observability.PrometheusHandler())
 
 }

@@ -1,33 +1,57 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/evelinix/nusaloka/internal/account/dto"
-	"github.com/evelinix/nusaloka/internal/account/model"
 	"github.com/evelinix/nusaloka/internal/account/service"
+	"github.com/evelinix/nusaloka/internal/shared/utils"
+	"github.com/gin-gonic/gin"
 )
 
-func RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	var user dto.RegisterRequest
-	err := json.NewDecoder(r.Body).Decode(&user)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+type AuthHandler struct {
+	authService service.AuthServiceInterface
+}
+
+func NewAuthHandler(s service.AuthServiceInterface) *AuthHandler {
+	return &AuthHandler{
+		authService: s,
+	}
+}
+
+func (ah *AuthHandler) AuthLoginHandler(c *gin.Context){
+	user, ok := utils.BindAndValidate[dto.LoginRequest](c)
+	if !ok {
 		return
 	}
 
-	var userData = model.User{
-		Email:    user.Email,
-		Password: user.Password,
-	}
-
-	err = service.RegisterUser(userData)
+	res, err := ah.authService.Login(c.Request.Context(), user)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"status": "error",
+			"message": err.Error(),
+		})
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
+	c.JSON(http.StatusOK, res)
+}
+
+func (ah *AuthHandler) RegisterHandler(c *gin.Context) {
+	user, ok := utils.BindAndValidate[dto.RegisterRequest](c)
+	if !ok {
+		return
+	}
+
+	res, err := ah.authService.Register(c.Request.Context(), user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
+	
 }

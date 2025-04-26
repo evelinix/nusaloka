@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>WebAuthn Register & Login Test</title>
+</head>
+
+<body>
+    <h1>WebAuthn Test</h1>
+    <button id="register-btn">Register</button>
+    <button id="login-btn">Login</button>
+
+    <script>
+        const userId = "83a61037-0055-43cb-b681-e49320cc3c67"; // USER ID kamu
+        const user_name = "nusaloka_user"
+
+        function base64urlToBuffer(base64url) {
+            const padding = '='.repeat((4 - base64url.length % 4) % 4);
+            const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const raw = window.atob(base64);
+            return Uint8Array.from([...raw].map(char => char.charCodeAt(0))).buffer;
+        }
+
+        function bufferDecode(value) {
+            value = value
+                .replace(/-/g, '+')
+                .replace(/_/g, '/')
+                .padEnd(value.length + (4 - value.length % 4) % 4, '=');
+            const binary = atob(value);
+            const buffer = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                buffer[i] = binary.charCodeAt(i);
+            }
+            return buffer;
+        }
+
+        function bufferToBase64url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        async function register() {
+            try {
+                navigator.credentials.get({
+                    publicKey: {
+                        
+                    }
+                }).then(navigatorCredential => console.log('navigator.credentials:', navigatorCredential));
+            } catch (err) {
+                console.log(err)
+            }
+        }
+
+        async function xxregister() {
+            try {
+                navigator.credentials.get().then(navigatorCredential => console.log('navigator.credentials:', navigatorCredential));
+
+                // Start BeginRegistration
+                const res = await fetch('/webauthn/register/begin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const options = await res.json();
+                console.log('Begin Registration Options:', options);
+
+                // Build publicKey options for navigator.credentials.create
+                const publicKey = {
+                    challenge: bufferDecode(options.challenge),
+                    rp: {
+                        name: options.rp_name,
+                        id: options.rp_id
+                    },
+                    user: {
+                        id: bufferDecode(options.user_id),
+                        name: options.user_name,
+                        displayName: options.user_name
+                    },
+                    pubKeyCredParams: [
+                        { type: "public-key", alg: -7 },    // ES256
+                        { type: "public-key", alg: -257 }   // RS256
+                    ],
+                    timeout: options.timeout,
+                    attestation: options.attestation,
+                    authenticatorSelection: {
+                        authenticatorAttachment: options.authenticator_selection.authenticator_attachment,
+                        userVerification: options.authenticator_selection.user_verification,
+                        requireResidentKey: options.authenticator_selection.require_resident_key
+                    },
+                    excludeCredentials: options.exclude_credentials?.map(cred => ({
+                        id: bufferDecode(cred.id),
+                        type: cred.type,
+                        transports: cred.transports
+                    }))
+                };
+
+                // Register credential
+                const credential = await navigator.credentials.create({ publicKey });
+                console.log('Created Credential:', credential);
+
+                // Prepare FinishRegistration body
+                const finishBody = {
+                    user_id: userId,
+                    credential_id: bufferToBase64url(credential.rawId),
+                    client_data_json: bufferToBase64url(credential.response.clientDataJSON),
+                    attestation_object: bufferToBase64url(credential.response.attestationObject)
+                };
+
+                // Finish Registration
+                const finishRes = await fetch('/webauthn/register/finish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(finishBody)
+                });
+
+                const finishData = await finishRes.json();
+                console.log('Finish Register Response:', finishData);
+
+                alert('🎉 Registration Successful!');
+            } catch (error) {
+                console.error('Registration Error:', error);
+                alert('❌ Registration Failed!');
+            }
+        }
+
+        async function login() {
+            try {
+                const beginRes = await fetch('http://localhost:9001/webauthn/login/begin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const options = await beginRes.json();
+                console.log('Begin login options:', options);
+
+                options.challenge = base64urlToBuffer(options.challenge);
+
+                if (options.allow_credentials) {
+                    options.allowCredentials = options.allow_credentials.map(cred => ({
+                        id: base64urlToBuffer(cred.id),
+                        type: cred.type,
+                        transports: cred.transports
+                    }));
+                    delete options.allow_credentials;
+                }
+
+                const assertion = await navigator.credentials.get({ publicKey: options });
+                console.log('Assertion:', assertion);
+
+                const body = {
+                    user_id: userId,
+                    credential_id: bufferToBase64url(assertion.rawId),
+                    authenticator_data: bufferToBase64url(assertion.response.authenticatorData),
+                    client_data_json: bufferToBase64url(assertion.response.clientDataJSON),
+                    signature: bufferToBase64url(assertion.response.signature),
+                    user_handle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null
+                };
+
+                const finishRes = await fetch('http://localhost:9001/webauthn/login/finish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const finishData = await finishRes.json();
+                console.log('Finish login response:', finishData);
+
+                alert('Login success!');
+            } catch (err) {
+                console.error(err);
+                alert('Login failed!');
+            }
+        }
+
+        document.getElementById('register-btn').addEventListener('click', register);
+        document.getElementById('login-btn').addEventListener('click', login);
+    </script>
+</body>
+
+</html>

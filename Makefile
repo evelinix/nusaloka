@@ -13,6 +13,14 @@ run:
 	@echo "Starting all services with Docker Compose..."
 	docker-compose up -d  # Jalankan di background
 
+run-db:
+	@echo "Starting Postgres Database with Docker Compose..."
+	docker-compose up -d db
+
+run-redis:
+	@echo "Starting Redis with Docker Compose..."
+	docker-compose up -d redis
+
 # Jalankan hanya Account Service
 run-account:
 	@echo "Starting Account Service with Docker Compose..."
@@ -90,11 +98,16 @@ help:
 .PHONY: dev
 dev:
 	@echo "🚀 Starting $(SERVICE) service with Air"
-	@air -d -root . -tmp_dir "tmp" \
+	@air -root . -tmp_dir "tmp" \
 	-build.cmd "go build -o ./tmp/$(SERVICE)-service ./cmd/$(SERVICE)/main.go" \
 	-build.bin "./tmp/$(SERVICE)-service" \
-	-log.time "true" \
-	-misc.clean_on_exit "true" \
-	-screen.clear_on_rebuild "true" \
-	-build.exclude_dir "docker" \
-	-build.include_ext "go"
+	-log.time true \
+	-misc.clean_on_exit true \
+	-screen.clear_on_rebuild true \
+	-build.exclude_dir "docker" 
+
+jwt-key:
+	@echo "Start Creating Private KEY"
+	@openssl ecparam -name secp521r1 -genkey -noout -out ./keys/es512-private.pem
+	@echo "Start Generating Public KEY"
+	@ openssl ec -in ./keys/es512-private.pem -pubout -out ./keys/es512-public.pem

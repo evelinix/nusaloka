@@ -11,6 +11,7 @@ type Referal struct {
 	Code string	`gorm:"uniqueIndex:idx_referals_code"`
 	UserID uuid.UUID 
 	User User `gorm:"foreignKey:UserID"`
+	gorm.Model
 }
 
 func (Referal) TableName() string {

@@ -1,45 +1,50 @@
 package middleware
 
 import (
-	"log"
+	"context"
 	"net/http"
+	"strings"
+	"time"
 
-	libredis "github.com/redis/go-redis/v9"
-	limiter "github.com/ulule/limiter/v3"
-	mhttp "github.com/ulule/limiter/v3/drivers/middleware/stdlib"
-	sredis "github.com/ulule/limiter/v3/drivers/store/redis"
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
-var RateLimitHandler func(http.Handler) http.Handler
+var ctx = context.Background()
 
-func InitRateLimiter() error {
-	// Define rate: 10 req per minute
-	rate, err := limiter.NewRateFromFormatted("10-M")
-	if err != nil {
-		return err
+// RateLimitMiddleware membuat rate limiter per IP per endpoint
+func RateLimitMiddleware(rdb *redis.Client, limit int, duration time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		endpoint := strings.ReplaceAll(c.FullPath(), "/", "_") // e.g. /auth/login => _auth_login
+		key := "rl:" + ip + ":" + endpoint
+
+		// increment counter di Redis
+		val, err := rdb.Incr(ctx, key).Result()
+		if err != nil {
+			log.Error().Err(err).Msg("Rate limiter error : ")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "rate limiter error"})
+			return
+		}
+
+		// set TTL kalau belum ada
+		if val == 1 {
+			rdb.Expire(ctx, key, duration)
+		}
+
+		// kalau udah melewati limit, tolak request
+		if int(val) > limit {
+			log.Warn().Msgf("Rate limit exceeded for IP: %s, endpoint: %s", ip, endpoint)
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error": "Terlalu banyak permintaan, coba lagi nanti 🙅‍♀️",
+			})
+			return
+		}
+
+		// Optional logging for rate limits
+		log.Info().Msgf("IP: %s, Endpoint: %s, Requests: %d", ip, endpoint, val)
+
+		c.Next()
 	}
-
-	// Create a redis client.
-	option, err := libredis.ParseURL("redis://localhost:6379/0")
-	if err != nil {
-		log.Fatal(err)
-		return err
-	}
-	client := libredis.NewClient(option)
-
-	// Create a store with the redis client.
-	store, err := sredis.NewStoreWithOptions(client, limiter.StoreOptions{
-		Prefix:   "limiter_chi_example",
-		MaxRetry: 3,
-	})
-	if err != nil {
-		log.Fatal(err)
-		return err
-	}
-
-	// Create a new middleware with the limiter instance.
-	rateMiddleware := mhttp.NewMiddleware(limiter.New(store, rate, limiter.WithTrustForwardHeader(true)))
-
-	RateLimitHandler = rateMiddleware.Handler
-	return nil
 }
